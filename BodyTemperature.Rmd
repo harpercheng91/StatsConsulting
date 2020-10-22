@@ -1,0 +1,125 @@
+---
+title: "Body Temperature: R code"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, eval=FALSE}
+library(readxl)
+library(tidyverse)
+library(latex2exp)
+library(lawstat)
+library(car)
+library(lme4)
+
+# Load data
+temp <- read_excel(here::here("temperature_data_for_stat551.xlsx")) %>% 
+  dplyr::select(-Couples, -Height, -Weight, -Partner_Part, -BMI, -morning, -evening, 
+                -evening_Time_period, -morning_Time_period, -Acces_num) %>% 
+  pivot_longer(cols=c(evening_Temp, morning_Temp), names_to="morning_evening", values_to="temp") %>% 
+  filter(temp>=34&temp<=42) 
+
+
+#################### Between-individual variation #######################
+temp.std <- temp %>%  
+  group_by(SubjectID) %>% 
+  summarize(std=sd(temp))
+
+# Descriptive analysis (by gender)
+temp %>% group_by(SubjectID) %>% 
+  mutate(std=sd(temp)) %>% 
+  group_by(Gender) %>% 
+  summarize(Mean=mean(std), Min=min(std), Max=max(std))
+
+temp %>% group_by(SubjectID) %>% 
+  mutate(std=sd(temp), label=if_else(std>0.325, "higher", "lower")) %>% 
+  group_by(Gender, label) %>% 
+  summarize(n=n()) %>% 
+  mutate(freq=n/sum(n))
+
+temp %>% group_by(SubjectID) %>% 
+  mutate(std=sd(temp)) %>% 
+  ungroup() %>% 
+  summarize(Mean=mean(std), Min=min(std), Max=max(std))
+
+
+# Checking t-test assumptions
+temp.std %>% 
+  ggplot(aes(std)) +
+  geom_histogram(aes(y=..density..), binwidth=0.03, color="black", fill="gray") +
+  stat_function(fun=dnorm, args=list(mean=mean(std), sd=sd(std)), color="blue") +
+  labs(title="Density Plot of Individual Standard Deviation on Oral Temperature",
+       x=TeX("Individual Standard Deviation ($\\degree C$)"),
+       y="Count") +
+  theme_bw()
+ggsave("hist.pdf", width=6, height=4)
+  
+temp.std %>% 
+ggplot(aes(sample=std)) + stat_qq(alpha=0.5, size=2) + stat_qq_line() +
+  labs(title="Quantile-Quantile Plot for Individual Standard Deviation \n on Oral Temperature",
+       x="Theoretical Quantiles", y="Sample Quantiles") +
+  theme_bw()
+ggsave("qqplot.pdf", width=6, height=4)
+
+# One sample one-sided t-test
+std <- temp.std %>% dplyr::select(std) %>% unlist(use.names=FALSE)
+t.test(x=std, alternative=c("greater"), mu=0.325)
+
+# Levene's statistic
+levene.test(y=temp$temp, group=as.factor(temp$SubjectID)) # From library lawstat
+leveneTest(temp ~ as.factor(SubjectID), data = temp) # From library car
+
+
+
+#################### Within-individual variation #######################
+
+# Visualization
+temp1 <- read_excel(here::here("temperature_data_for_stat551.xlsx")) %>% 
+  dplyr::select(SubjectID, Gender, Age, evening_Temp, morning_Temp, evening_Time_period) %>% 
+  filter(morning_Temp>=34 & morning_Temp<=42 & evening_Temp>=34 & evening_Temp<=42) %>% 
+  mutate(mean=(evening_Temp+morning_Temp)/2, 
+         std=sqrt(((morning_Temp-mean)^2+(evening_Temp-mean)^2)/2),
+         time=as.integer(factor(evening_Time_period))) 
+
+temp1 %>% 
+  group_by(SubjectID) %>% 
+  mutate(mean_std=mean(std), label=if_else(mean_std>0.325, "higher", "lower")) %>% 
+  group_by(label) %>% 
+  summarize(n=n()) %>% 
+  mutate(freq=n/sum(n))
+
+temp1 %>% 
+  filter(Gender=="female") %>% 
+  mutate(num=group_indices_(temp1 %>% filter(Gender=="female"), .dots = c('SubjectID'))) %>% 
+  ggplot(aes(x=num, y=std, group=num)) +
+  geom_boxplot(outlier.size=4, outlier.color="black") +
+  geom_jitter(alpha=0.5, color="deepskyblue3") +
+  scale_y_continuous(limits=c(0, 1.25)) +
+  geom_hline(yintercept=0.325, color="hotpink2", size=1) +
+  labs(title="Individual Boxplot of Female on inter-day Standard Deviation of Body Temperature",
+       x="Female Subject", y="Standard Deviation") +
+  geom_text(aes(55, 0.325 , label="y=0.325", vjust=-1), color="hotpink2", size=4.5) +
+  theme_bw()
+ggsave("femaleBox.pdf", width=8, height=4.5)
+
+temp1 %>% 
+  filter(Gender=="male") %>% 
+  mutate(num=group_indices_(temp1 %>% filter(Gender=="male"), .dots = c('SubjectID'))) %>% 
+  ggplot(aes(x=num, y=std, group=num)) +
+  geom_boxplot(outlier.size=4, outlier.color="black") +
+  geom_jitter(alpha=0.5, color="deepskyblue3") +
+  scale_y_continuous(limits=c(0, 1.25)) +
+  geom_hline(yintercept=0.325, color="hotpink2", size=1) +
+  labs(title="Individual Boxplot of Male on inter-day Standard Deviation of Body Temperature",
+       x="Male Subject", y="Standard Deviation") +
+  geom_text(aes(46, 0.325 , label="y=0.325", vjust=-1), color="hotpink2", size=4.5) +
+  theme_bw()
+ggsave("maleBox.pdf", width=8, height=4.5)
+
+
+fit <- aov(std~Age+Gender+as.factor(SubjectID), data=temp1)
+summary(fit)
+```
