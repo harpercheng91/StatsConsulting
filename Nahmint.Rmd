@@ -14,41 +14,57 @@ suppressPackageStartupMessages(library(ggpubr))
 suppressPackageStartupMessages(library(statmod))
 suppressPackageStartupMessages(library(boot))
 suppressPackageStartupMessages(library(MASS))
+
 ```
 
 
-# 1. Gamma GLM (replace 0 with 0.01)
+# 1. Gamma GLM
 
 ```{r}
-Nahmint <- read.csv("Nahmint.all.csv", stringsAsFactors=FALSE)
+Nahmint <- read.csv("../data/Nahmint.all.csv", stringsAsFactors=FALSE)
 Nahmint_pos <- Nahmint %>% 
   mutate(biomass.m2=if_else(biomass.m2==0, 0.01, biomass.m2))
 
-## 1. Histogram of biomass for all five streams - right skewed
+## 1. Exploratory plots
+### Histogram of biomass for all five streams - right skewed
 Nahmint_pos %>% 
   ggplot() +
   geom_histogram(aes(x=biomass.m2), color="black") +
   labs(x="Biomass (per square meter)", y="Count") +
   theme_bw()
-ggsave("replaced.pdf", width=6, height=3)
+ggsave("../Plots/replaced.pdf", width=6, height=3)
 
+### Scatterplots of biomass versus three predictors respectively
+Nahmint_pos %>%
+  ggplot() +
+  geom_point(aes(x=gradient, y=biomass.m2), color="steelblue", alpha=0.7) +
+  ggsave("../Plots/biomass_vs_gradient.png", width=3, height = 3)
+
+Nahmint_pos %>%
+  ggplot() +
+  geom_point(aes(x=BFW.m, y=biomass.m2), color="steelblue", alpha=0.7) +
+  ggsave("../Plots/biomass_vs_BFW.png", width=3, height = 3)
+
+Nahmint_pos %>%
+  ggplot() +
+  geom_point(aes(x=wood.m2, y=biomass.m2), color="steelblue", alpha=0.7) +
+  ggsave("../Plots/biomass_vs_wood.png", width=3, height = 3)
+  
 
 ## 2. Gamma GLM with log link 
 fit.gamma <- glm(biomass.m2~gradient+BFW.m+wood.m2, data=Nahmint_pos, 
                  family=Gamma(link=log), maxit=1000000)
-summary(fit.gamma)
+### Get maximum likelihood estimates on shape and scale parameters:
+a <- gamma.shape(fit.gamma)$alpha  # from MASS library
+b <- mean(predict(fit.gamma, type="response"))/a
+summary(fit.gamma, dispersion = 1/a)
 
 ## A side note: Inverse Gaussian with log link (doesn't converge for the given dataset)
 fit.ig <- glm(biomass.m2~gradient+BFW.m+wood.m2, data=Nahmint_pos, 
               family=inverse.gaussian(link=log))
 summary(fit.ig)
 
-
 ## 3. Check if the response y follows a Gamma distribution
-### Get maximum likelihood estimates on shape and scale parameters:
-a <- gamma.shape(fit.gamma)$alpha  # from MASS library
-b <- mean(predict(fit.gamma, type="response"))/a
-
 ### Overlay the fitted density curve on top of the histogram of the observed response:
 binwidth <- 0.08
 n <- Nahmint_pos %>% nrow()
@@ -78,6 +94,27 @@ df_gamma_link %>%
   labs(x="Linear predictor", y="Linearized Response") +
   theme_bw()
 ggsave("linkfunc.pdf", width=6, height=3)
+
+
+### Scatterplots of linearized biomass versus three predictors respectively
+Nahmint_pos %>%
+  ggplot() +
+  geom_point(aes(x=gradient, y=z), color="steelblue", alpha=0.7) +
+  ylab("Linearized biomass") +
+  ggsave("../Plots/linearized_biomass_vs_gradient.png", width=3, height = 3)
+
+Nahmint_pos %>%
+  ggplot() +
+  geom_point(aes(x=BFW.m, y=z), color="steelblue", alpha=0.7) +
+  ylab("Linearized biomass") +
+  ggsave("../Plots/linearized_biomass_vs_BFW.png", width=3, height = 3)
+
+Nahmint_pos %>%
+  ggplot() +
+  geom_point(aes(x=wood.m2, y=z), color="steelblue", alpha=0.7) +
+  ylab("Linearized biomass") +
+  ggsave("../Plots/linearized_biomass_vs_wood.png", width=3, height = 3)
+
 
 ```
 
