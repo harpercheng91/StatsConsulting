@@ -1,0 +1,193 @@
+---
+title: "Complex Survey Analysis"
+author: "Harper Cheng"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(nnet))
+suppressPackageStartupMessages(library(survey))
+```
+
+```{r}
+dat <- load("demo.Rdata")
+
+## Remove NAs in bootstrap weights:
+PUMF.BSW <- PUMF.BSW %>% janitor::remove_empty(which="cols")
+PUMF.BSW %>% head()
+PUMFdata %>% head() 
+
+PUMFdata$DEMPSTAT%>% levels() #binary--> logistic regression
+PUMFdata$DLASTWKG %>% levels() #categorical--> multinomial logistic regression
+
+###### Use Employee status and Number of months since last worked as reponses
+###### Explanatory variables are age and gender
+
+```
+
+# 1. Data Processing
+```{r}
+## Join the dataframe containing the responses and covariates with 
+## the dataframe containing bootstrap weights;
+## DEMPSTAT: use `case_when` to convert "employed" to 1, "unemployed" to 0, and NA otherwise;
+## DLASTWKG: similar to DEMPSTAT;
+## AGE_YRSG and SEX: use `as.factor` to convert the covariates to factor;
+## use `fct_drop` to drop unused factor levels.
+## `remove_empty` from the janitor package can be used to remove columns or rows containing only NAs.
+
+dat <- PUMFdata %>% 
+  select(PUMFID, PUMFWGHT, AGE_YRSG, SEX, DEMPSTAT, DLASTWKG) %>% 
+  inner_join(PUMF.BSW, by=c("PUMFID", "PUMFWGHT")) %>% 
+  mutate(DEMPSTAT=case_when(DEMPSTAT=="Employed"~1, DEMPSTAT=="Unemployed"~0),
+         DLASTWKG=case_when(DLASTWKG=="Has not been working for less than six months"~1,
+                            DLASTWKG=="Has not been working for six months to less than one year"~2,
+                            DLASTWKG=="Has not been working for one year to less than two years"~3,
+                            DLASTWKG=="Has not been working for two years or more"~4),
+         AGE_YRSG=as.factor(AGE_YRSG) %>% fct_drop(), 
+         SEX=as.factor(SEX) %>% fct_drop(),
+         PUMFID=as.factor(PUMFID)) %>% 
+  janitor::remove_empty(which="cols")
+
+```
+
+# 2. Model-based Approach
+## 2.1 Logistic Regression
+```{r}
+## `family` is set to `binomial` for logistic regression;
+## the response can either be a numerical value or a factor (doesn't affect the results)
+logistic.fit <- glm(DEMPSTAT~AGE_YRSG+SEX, data=dat, family=binomial)
+summary(logistic.fit)
+
+## Check which level is selected as the baseline level by R (the first level listed):
+dat$AGE_YRSG %>% levels()
+dat$SEX %>% levels()
+
+```
+
+
+## 2.2  Multinomial Logistic Regression
+```{r}
+## The function `multinom` lives in the pacakge `nnet` (loaded in "r setup" chunk).
+multinom.fit <- multinom(DLASTWKG~SEX, data=dat)
+summary(multinom.fit)
+
+```
+
+
+# 4. Analysis on Complex Survey Data (`survey` package)
+## 4.1 Exploratory Analysis: Summary Statistics and Visualization 
+```{r}
+### In preparation for the analysis, we need to first obtain the "design object";
+### `svydesign` returns an object that contains information about the survey design;
+### this object functions the same way the dataframe functions in the model-based analysis.
+
+### Get the design object using survey weights;
+### This is because survey weights are good enough for providing accurate estimates on
+### means and proportions.
+sw.des <- svydesign(data=dat, weights=~PUMFWGHT, id=~PUMFID, strata=~AGE_YRSG)
+
+
+## 4.1.1 Summary Statistics
+
+## 2 by 2 table of employment status and gender:
+tbl <- svytable(~DEMPSTAT+SEX, design=sw.des) 
+## Chi-square test for testing independence between `DEMPSTAT` and `SEX`:
+summary(tbl) 
+
+
+## 4.1.2 Visualization
+tbl %>% data.frame() %>% 
+  group_by(SEX) %>% 
+  mutate(sub_total=sum(Freq), prop=Freq/sub_total) %>% 
+  ggplot(aes(x=SEX, y=prop, fill=DEMPSTAT)) +
+  geom_bar(stat="identity", position = "dodge") +
+  labs(y="Proportion by Gender", x="Gender",
+       title="Histogram on the proportion of employment status by gender") +
+  scale_fill_discrete(name="Employment Status", labels=c("Unemployed", "Employed")) +
+  theme_bw()
+ggsave("eda.pdf", width=6, height=4) #saving ggplot
+```
+
+
+## 4.2 Logistic Regression
+```{r}
+## Main idea: Fit logistic regression repeatedly, each time using one set of bootstrap weights
+
+## Get column names of bootstrap weights:
+bsw <- colnames(PUMF.BSW)
+
+## Initialize an empty dataframe for storing regression coefficients:
+beta <- matrix(NA, nrow=length(bsw)-2, ncol=100) %>% data.frame()
+
+for (i in 3:length(bsw)) {
+  # Create the design object using the i-th bootstrap weights:
+  # The index starts from 3 because bootstrap weights starts from here.
+  des <- svydesign(data=dat, weights=~unlist(dat[,bsw[i]], use.names=FALSE), 
+                   id=~PUMFID, strata=~AGE_YRSG)
+  
+  # Fit a logistic regression and extract a table of coefficients:
+  survey_logit <- svyglm(DEMPSTAT~AGE_YRSG+SEX, family=binomial, design=des, na.action=na.omit)
+  coef <- summary(survey_logit)$coefficient
+  
+  # Store coefficient values in a list called `beta`:
+  for (k in 1:nrow(coef)) beta[i-2,k] <- coef[[k]]
+}
+
+## Remove extra columns (because we initialized 100 columns but the number of coefficients
+## is likely smaller than 100):
+beta <- janitor::remove_empty(beta, which="cols")
+
+## Use the obtained empirical distribution to calculate mean, standard error, and CI:
+## Take X2 as an example:
+estimates <- mean(beta$X2)
+standard_error <- sd(beta$X2)
+confidence_interval <- sprintf("(%.3f, %.3f)", quantile(beta$X2, 0.025), quantile(beta$X2, 0.975))
+
+## If you want to calculate the above statistics for all parameters, you can use `apply()`:
+## `FUN` is the function or operation you want to applied to the dataframe;
+## `MARGIN=2` means that `FUN` is applied to each column.
+estimates_all <- apply(beta, MARGIN=2, FUN=mean)
+standard_error_all <- apply(beta, MARGIN=2, FUN=sd)
+## You can even use user-defined function to pass on to `FUN`:
+confidence_interval_all <- apply(beta, MARGIN=2, 
+                                 FUN=function(x) sprintf("(%.3f, %.3f)", quantile(x, 0.025), quantile(x, 0.975)))
+
+
+#### A quick sanity check ####
+
+## The standard error of the regression coefficient for X2 calculated from 
+## the bootstrap empirical distribution is 0.02009605.
+## Now, we fit a logistic regression using survey weights and check the standard error
+## from the summary output:
+survey_logit <- svyglm(DEMPSTAT~AGE_YRSG+SEX, family=binomial, design=sw.des, na.action=na.omit)
+summary(survey_logit)$coefficient
+## The standard error of the parameter coefficient for X2 is 0.08365457 which is 
+## larger than the bootstrap results.
+
+```
+
+
+## 4.3 Multinomial Logistic Regression
+```{r}
+## Option 1: Use `nnet` package and specify the `weights` argument to be the bootstrap weights:
+survey_multi1 <- multinom(DLASTWKG~SEX, data=dat, weights=WRPP0001)
+summary(survey_multi1)
+
+
+## Option 2: Use `svyolr` from the `survey` package to obtain proportional odds:
+des2 <- svydesign(data=dat, weights=~WRPP0001, id=~PUMFID, strata=~AGE_YRSG)
+survey_multi2 <- svyolr(as.factor(DLASTWKG)~SEX, design=des2)
+summary(survey_multi2)
+
+## Check the proportional odds assumption:
+ex1 <- svyglm(I(DLASTWKG>1)~SEX, des2, family="binomial")
+ex2 <- svyglm(I(DLASTWKG>2)~SEX, des2, family="binomial")
+ex3 <- svyglm(I(DLASTWKG>3)~SEX, des2, family="binomial")
+
+print(c(coef(ex1)[2], coef(ex2)[2], coef(ex3)[2]))
+
+```
+
+
