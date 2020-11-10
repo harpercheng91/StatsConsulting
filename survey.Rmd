@@ -127,8 +127,10 @@ for (i in 3:length(bsw)) {
   des <- svydesign(data=dat, weights=~unlist(dat[,bsw[i]], use.names=FALSE), 
                    id=~PUMFID, strata=~AGE_YRSG)
   
-  # Fit a logistic regression and extract a table of coefficients:
+  # Fit a logistic regression with the current design object:
   survey_logit <- svyglm(DEMPSTAT~AGE_YRSG+SEX, family=binomial, design=des, na.action=na.omit)
+  
+  # Extract a table of coefficients:
   coef <- summary(survey_logit)$coefficient
   
   # Store coefficient values in a list called `beta`:
