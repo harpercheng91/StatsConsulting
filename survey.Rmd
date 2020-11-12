@@ -11,7 +11,7 @@ suppressPackageStartupMessages(library(nnet))
 suppressPackageStartupMessages(library(survey))
 ```
 
-```{r}
+```{r, include=F}
 dat <- load("demo.Rdata")
 
 ## Remove NAs in bootstrap weights:
@@ -28,7 +28,7 @@ PUMFdata$DLASTWKG %>% levels() #categorical--> multinomial logistic regression
 ```
 
 # 1. Data Processing
-```{r}
+```{r, include=F}
 ## Join the dataframe containing the responses and covariates with 
 ## the dataframe containing bootstrap weights;
 ## DEMPSTAT: use `case_when` to convert "employed" to 1, "unemployed" to 0, and NA otherwise;
@@ -54,7 +54,7 @@ dat <- PUMFdata %>%
 
 # 2. Model-based Approach
 ## 2.1 Logistic Regression
-```{r}
+```{r, include=F, eval=F}
 ## `family` is set to `binomial` for logistic regression;
 ## the response can either be a numerical value or a factor (doesn't affect the results)
 logistic.fit <- glm(DEMPSTAT~AGE_YRSG+SEX, data=dat, family=binomial)
@@ -68,7 +68,7 @@ dat$SEX %>% levels()
 
 
 ## 2.2  Multinomial Logistic Regression
-```{r}
+```{r, include=F, eval=F}
 ## The function `multinom` lives in the pacakge `nnet` (loaded in "r setup" chunk).
 multinom.fit <- multinom(DLASTWKG~SEX, data=dat)
 summary(multinom.fit)
@@ -78,7 +78,7 @@ summary(multinom.fit)
 
 # 4. Analysis on Complex Survey Data (`survey` package)
 ## 4.1 Exploratory Analysis: Summary Statistics and Visualization 
-```{r}
+```{r, include=F, eval=F}
 ### In preparation for the analysis, we need to first obtain the "design object";
 ### `svydesign` returns an object that contains information about the survey design;
 ### this object functions the same way the dataframe functions in the model-based analysis.
@@ -112,7 +112,7 @@ ggsave("eda.pdf", width=6, height=4) #saving ggplot
 
 
 ## 4.2 Logistic Regression
-```{r}
+```{r, include=F, eval=F}
 ## Main idea: Fit logistic regression repeatedly, each time using one set of bootstrap weights
 
 ## Get column names of bootstrap weights:
@@ -157,6 +157,13 @@ confidence_interval_all <- apply(beta, MARGIN=2,
                                  FUN=function(x) sprintf("(%.3f, %.3f)", quantile(x, 0.025), quantile(x, 0.975)))
 
 
+#### A Side Note ####
+## You can also use `glm()` with `weights=` to get the coefficient estimates;
+## but the standard error is not reliable as functions in the `survey` package
+## handles survey/bootstrap weights more properly.
+glm(DEMPSTAT~AGE_YRSG+SEX, data=dat, family=binomial, weights=WRPP0001)
+
+
 #### A quick sanity check ####
 
 ## The standard error of the regression coefficient for X2 calculated from 
@@ -172,8 +179,8 @@ summary(survey_logit)$coefficient
 
 
 ## 4.3 Multinomial Logistic Regression
-```{r}
-## Option 1: Use `nnet` package and specify the `weights` argument to be the bootstrap weights:
+```{r, include=F, eval=F}
+## Option 1: Use `nnet` package and specify the `weights=` argument to be the bootstrap weights:
 survey_multi1 <- multinom(DLASTWKG~SEX, data=dat, weights=WRPP0001)
 summary(survey_multi1)
 
