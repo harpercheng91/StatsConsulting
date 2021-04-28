@@ -1,2 +1,14 @@
 # Statistical Consulting 
-This repository is home to R code and consulting reports for statistical consulting cases
+This repository is home to R code and consulting reports for statistical consulting cases. Here are brief summaries on their research objectives.
+
+* [Body Temperature Case](https://github.com/harpercheng91/StatsConsulting/tree/main/BodyTemperature)
+  
+  The human body temperature at 37 degrees Celsius has long been used as a universally accepted approximation for one’s normal temperature. This standard is recently questioned by researchers as they raised concerns that this approximation might not be an accurate estimation for some people due to between-individual temperature variations. The continuation of using this erroneous approximation for body temperature leads to clinical problems as a fever may go undetected in COVID-19 screening for people with normal body temperatures lower than 37 degrees Celsius. The goal of this research is to corroborate that assuming 37 degrees Celsius as the normal temperature for everyone is unjustified. Instead of attempting to estimate the normal temperature for the entire population, they hope to implement new protocols on routine temperature-taking at an individual level such that physicians can diagnose fever based on patients’ own normal temperature ranges.
+  
+* [Nahmint Juvenile Salmon Density Case](https://github.com/harpercheng91/StatsConsulting/tree/main/Nahmint)
+  
+  The objective of this research is to analyze how physical characteristics of streams affect juvenile fish density and biomass at both reach and habitat unit scale. Fish habitat is assessed at the reach scale to evaluate how fish abundance is related to overall stream characteristics, such as mean channel width, mean gradient, in-stream wood density, etc. Fish abundance is also studied at the habitat unit scale which describes morphological attributes within each stream. Common habitat units include pool, riffle, and glide, with pool being the main reservoir for juvenile fish.
+  
+* [APS Case](https://github.com/harpercheng91/StatsConsulting/tree/main/Survey)
+
+  The Aboriginal Peoples Survey (APS) is a national survey conducted by Statistics Canada on First Nations people in Canada who are older than 15 y.o and are living off reserve, Métis and Inuit. It is conducted every five years and collects information on employment, education, health and many other aspects. APS design is a two-phase design in which the first phase corresponds to the selection of eligible individuals who identified themselves as aboriginal people in the Census of Population of the previous year. The second phase is stratified sampling where they use geographical region, age group, and aboriginal group as strata. The end goal is to compare aboriginal people living in Vancouver to those living in Surrey, in terms of their employment status, health conditions and other aspects.
